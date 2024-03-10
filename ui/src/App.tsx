@@ -1,85 +1,185 @@
-import React, { useEffect } from 'react';
-
-// Styles
-import theme from './theme';
+import React, { ChangeEvent, useEffect, useState } from 'react';
 
 // Components
 import {
   ChakraProvider,
   Modal,
+  Text,
   Button,
   ModalBody,
-  ModalCloseButton,
   ModalContent,
   ModalFooter,
   ModalHeader,
   ModalOverlay,
-  useDisclosure
+  useDisclosure,
+  Box,
+  Select,
+  Spinner,
+  VStack,
+  Input,
+  ListItem,
+  List,
+  ListIcon,
+  InputGroup,
+  InputRightElement,
+  IconButton,
+  Skeleton
 } from '@chakra-ui/react';
-import { Pane } from 'evergreen-ui';
 import LottieView from 'react-lottie';
 import animationData from './loading.json';
+import { CloseIcon } from '@chakra-ui/icons';
 
 // Algorithm
 import buildMealPlan, { MealPlan } from './algorithm/algorithm';
 import { Recipe, RECIPES } from './algorithm/data';
 import { flushSync } from 'react-dom';
-
-// interface ScreenProps {
-//   children: React.ReactNode;
-//   backgroundColor?: string;
-// }
-
-// function Screen({ children, backgroundColor }: ScreenProps) {
-//   return (
-//     <Pane
-//       width="100%"
-//       height="100%"
-//       minHeight="100vh"
-//       paddingBottom={100}
-//       display="flex"
-//       justifyContent="center"
-//       backgroundColor={backgroundColor || theme.colors.background}
-//     >
-//       <Pane
-//         className="App"
-//         width="80%"
-//         maxWidth="1200px"
-//         height="100%"
-//         display="flex"
-//         flexDirection="column"
-//         justifyContent="flex-start"
-//         alignItems="center"
-//         backgroundColor={theme.colors.background}
-//       >
-//         {children}
-//       </Pane>
-//     </Pane>
-//   );
-// }
+import { on } from 'events';
 
 function BasicUsage() {
-  const { isOpen, onOpen, onClose } = useDisclosure({ defaultIsOpen: true });
+  const { isOpen, onOpen, onClose } = useDisclosure({ defaultIsOpen: false });
   return (
     <>
-      <Button onClick={onOpen}>Open Modal</Button>
-
+      <Button onClick={onOpen}>About</Button>
       <Modal isOpen={isOpen} onClose={onClose}>
         <ModalOverlay />
-        <ModalContent>
-          <ModalHeader>Modal Title</ModalHeader>
-          <ModalCloseButton />
-          <ModalBody></ModalBody>
+        <ModalContent margin={4}>
+          <ModalHeader>About Meal Planner</ModalHeader>
+          <ModalBody>
+            <Text>
+              This is a personal project of mine for exploring algorithms for meal planning. The idea is to pick recipes
+              that all use similar ingredients to minimise the number of half empty jars and packets in the fridge that
+              end up going off and being thrown away (something I'm quite guilty of).
+            </Text>
+            <br />
+            <Text>
+              This version uses recipes from{' '}
+              <a
+                style={{ textDecoration: 'underline' }}
+                href="https://www.amazon.co.uk/Roasting-Tin-Simple-Dish-Dinners/dp/1910931519"
+              >
+                The Roasting Tin.
+              </a>{' '}
+              Obviously I don't provide the actual recipes here, I just reference the page numbers, so you'll need the
+              book to use this tool.
+            </Text>
+          </ModalBody>
 
           <ModalFooter>
-            <Button colorScheme="blue" mr={3} onClick={onClose}>
-              Close
+            <Button mr={3} onClick={onClose}>
+              Understood
             </Button>
-            <Button variant="ghost">Secondary Action</Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
     </>
+  );
+}
+
+interface AutocompleteProps {
+  options: Recipe[];
+  onSelect: (id: string) => void;
+}
+
+function AutocompleteSearch({ options, onSelect }: AutocompleteProps) {
+  const [inputValue, setInputValue] = useState('');
+  const [filteredSuggestions, setFilteredSuggestions] = useState<Recipe[]>([]);
+
+  const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    onSelect('');
+    setInputValue(value);
+
+    const filteredOptions = options.filter((option) => option.id.toLowerCase().includes(value.toLowerCase()));
+    setFilteredSuggestions(filteredOptions.slice(0, 10));
+  };
+
+  const handleSelect = (suggestion: string) => {
+    setInputValue(suggestion);
+    onSelect(suggestion);
+    setFilteredSuggestions([]);
+  };
+
+  const handleClearInput = () => {
+    setInputValue('');
+    onSelect('');
+    setFilteredSuggestions([]);
+  };
+
+  return (
+    <VStack spacing={4} width="100%">
+      <InputGroup width={['80%', '100%']}>
+        <Input
+          placeholder="Find a recipe..."
+          value={inputValue}
+          onChange={handleChange}
+          color="white"
+          borderWidth={2}
+          fontWeight={600}
+          userSelect="none"
+          _placeholder={{ color: 'gray.200' }}
+          _active={{ borderColor: 'teal.50' }}
+          _focus={{ borderColor: 'teal.50', boxShadow: 'none' }}
+          _hover={{ borderColor: 'teal.50' }}
+        />
+        {inputValue && (
+          <InputRightElement>
+            <IconButton aria-label="Clear input" icon={<CloseIcon />} size="sm" onClick={handleClearInput} />
+          </InputRightElement>
+        )}
+      </InputGroup>
+      <Box width="100%">
+        {inputValue && (
+          <List spacing={2}>
+            {filteredSuggestions.map((suggestion, index) => (
+              <ListItem
+                key={index}
+                cursor="pointer"
+                _hover={{ bg: 'teal.900' }}
+                onClick={() => handleSelect(suggestion.id)}
+                textColor="white"
+                fontWeight={600}
+                padding={1}
+                paddingLeft={2}
+                borderRadius={4}
+              >
+                {suggestion.id}
+              </ListItem>
+            ))}
+          </List>
+        )}
+      </Box>
+    </VStack>
+  );
+}
+
+function RecipeCard({ recipe }: { recipe: Recipe }) {
+  return (
+    <Box
+      userSelect="none"
+      display="flex"
+      flexDirection="row"
+      alignItems="center"
+      justifyContent="space-between"
+      padding={4}
+      borderRadius={8}
+      backgroundColor="white"
+      width="100%"
+      maxWidth={600}
+    >
+      <Box width="70%">
+        <Text fontSize="xl" fontWeight="bold">
+          {recipe.id} {/* Assuming ID is used as title */}
+        </Text>
+        <Text fontSize="sm" color="gray.600">
+          {recipe.name}.
+        </Text>
+      </Box>
+      <Box width="25%" display="flex" alignItems="center" justifyContent="center">
+        <Text fontSize="m" fontWeight="bold" textAlign="center">
+          Page {recipe.page}
+        </Text>
+      </Box>
+    </Box>
   );
 }
 
@@ -97,19 +197,20 @@ function App() {
   const recipeList: Recipe[] = RECIPES;
   const recipeNames: string[] = recipeList.map((recipe) => recipe.name);
 
-  const handleRecipeChange = (changedItem: string) => {
-    const recipe = recipeList.find((recipe) => recipe.name === changedItem);
-    setSelectedRecipe(recipe || null);
-  };
-
-  const handleBuildMealPlan = () => {
-    if (!selectedRecipe) {
+  const handleRecipeChange = (changedItemID: string) => {
+    const recipe = recipeList.find((recipe) => recipe.id === changedItemID);
+    if (!recipe) {
+      setSelectedRecipe(null);
+      setMealPlan(null);
+      setIsComputing(false);
       return;
     }
+
+    setSelectedRecipe(recipe || null);
     setMealPlan(null);
     setIsComputing(true);
 
-    buildMealPlan(selectedRecipe).then((mealPlan) => {
+    buildMealPlan(recipe).then((mealPlan) => {
       flushSync(() => {
         setMealPlan(mealPlan);
         setIsComputing(false);
@@ -132,217 +233,111 @@ function App() {
 
   return (
     <ChakraProvider>
-      <BasicUsage />
+      <Box bg="teal.800">
+        <Box
+          display="flex"
+          flexDirection="column"
+          justifyContent="flex-start"
+          alignItems="center"
+          height="100%"
+          minHeight="100vh"
+          padding={4}
+          width="100%"
+          maxWidth={1200}
+          margin="auto"
+          backgroundColor="teal.800"
+        >
+          <Box display="flex" justifyContent="flex-end" width="100%">
+            <BasicUsage />
+          </Box>
+          <Box width="100%" marginTop={4} display="flex" justifyContent="center">
+            <Box w={['100%', '50%']}>
+              <img src="assets/header.png" alt="header" />
+            </Box>
+          </Box>
+          <Box
+            display="flex"
+            flexDirection="column"
+            alignItems="center"
+            justifyContent="center"
+            width="100%"
+            marginTop={4}
+            maxWidth={600}
+          >
+            <AutocompleteSearch options={recipeList} onSelect={handleRecipeChange} />
+          </Box>
+          <Box
+            display="flex"
+            flexDirection="column"
+            justifyContent="center"
+            alignItems="center"
+            marginTop={4}
+            width="100%"
+            maxWidth={600}
+          >
+            {selectedRecipe && <RecipeCard recipe={selectedRecipe} />}
+          </Box>
+
+          {/* Display Meal Plan */}
+          {mealPlan && (
+            <Box
+              userSelect="none"
+              marginTop={8}
+              display="flex"
+              flexDirection="column"
+              justifyContent="center"
+              alignItems="center"
+              padding={4}
+              borderRadius={8}
+              backgroundColor="white"
+              width="100%"
+              maxWidth={600}
+            >
+              <Text fontSize="xl" fontWeight="bold" marginBottom={4}>
+                Recipes
+              </Text>
+              {mealPlan.recipes.map((recipe) => (
+                <RecipeCard recipe={recipe} />
+              ))}
+              <Text fontSize="xl" fontWeight="bold" marginTop={8} marginBottom={4}>
+                Shopping List
+              </Text>
+              {Object.keys(mealPlan.productList).map((product) => (
+                <Box display="flex" alignItems="center" justifyContent="space-between" width="100%">
+                  <Text fontSize="lg">
+                    {mealPlan.productList[product]} {product}
+                  </Text>
+                </Box>
+              ))}
+            </Box>
+          )}
+
+          {/* Thinking */}
+          {isComputing && (
+            <Box marginTop={8} display="flex" flexDirection="column" alignItems="center" opacity={0.7}>
+              {/* <LottieView
+              options={{
+                loop: true,
+                autoplay: true,
+                animationData: animationData,
+                rendererSettings: {
+                  preserveAspectRatio: 'xMidYMid slice'
+                }
+              }}
+              speed={0.1}
+              height={100}
+              width={400}
+            /> */}
+              <Spinner color="gray.200" size="xl" />
+              <Text fontSize="lg" marginTop={8} fontWeight="bold" color="white">
+                Building a plan
+              </Text>
+            </Box>
+          )}
+        </Box>
+      </Box>
     </ChakraProvider>
-    // <ThemeProvider value={theme}>
-    //   <Portal>
-    //     <Pane display="flex" justifyContent="center" alignItems="center" height="100vh">
-    //       <Card
-    //         hidden={!isAboutOpen}
-    //         padding={24}
-    //         position="fixed"
-    //         top={100}
-    //         width="80%"
-    //         backgroundColor={theme.colors.blueTint}
-    //         elevation={3}
-    //       >
-    //         <Heading size={800} marginBottom={24}>
-    //           About Meal Planner
-    //         </Heading>
-    //         <Pane>
-    //           <Text>A personal project to explore algorithms for meal planning. </Text>
-    //           <ul>
-    //             <li>
-    //               <Text>Uses a simple algorithm to generate a meal plan and shopping list based on a recipe.</Text>
-    //             </li>
-    //             <li>
-    //               <Text>
-    //                 The algorithm is a simple greedy algorithm that tries to minimize the number of products used in
-    //                 recipes.
-    //               </Text>
-    //             </li>
-    //             <li>
-    //               <Text>It is not perfect and may not always generate the best meal plan.</Text>
-    //             </li>
-    //             <li>
-    //               <Text>It is a personal project and is not meant to be used for commercial purposes.</Text>
-    //             </li>
-    //           </ul>
-    //         </Pane>
-    //         <Button
-    //           marginTop={24}
-    //           appearance="primary"
-    //           onClick={() => setIsAboutOpen(false)}
-    //           iconBefore={TickIcon}
-    //           intent="success"
-    //         >
-    //           Got it
-    //         </Button>
-    //       </Card>
-    //     </Pane>
-    //   </Portal>
-    //   <Screen>
-    //     <Pane
-    //       marginTop={50}
-    //       display="flex"
-    //       flexDirection="row"
-    //       alignItems="center"
-    //       justifyContent="flex-end"
-    //       width="100%"
-    //     >
-    //       {/* Reduce opacity on hover. */}
-    //       <Pane
-    //         display="flex"
-    //         alignItems="center"
-    //         justifyContent="center"
-    //         cursor="pointer"
-    //         userSelect="none"
-    //         onClick={() => setIsAboutOpen(true)}
-    //         onMouseEnter={(e: React.MouseEvent<HTMLDivElement, MouseEvent>)
-    // => (e.currentTarget.style.opacity = '0.7')}
-    //         onMouseLeave={(e: React.MouseEvent<HTMLDivElement, MouseEvent>)
-    // => (e.currentTarget.style.opacity = '1')}
-    //       >
-    //         <HelpIcon size={24} marginRight={8} color={theme.colors.primary} opacity={0.7} />
-    //         <Text fontSize={24} color={theme.colors.primary} opacity={0.7}>
-    //           About
-    //         </Text>
-    //       </Pane>
-    //     </Pane>
-
-    //     {/* Search Recipe */}
-    //     <Pane
-    //       display="flex"
-    //       flexDirection="column"
-    //       alignItems="center"
-    //       justifyContent="center"
-    //       userSelect="none"
-    //       marginTop={50}
-    //       width="100%"
-    //     >
-    //       <Pane>
-    //         <img
-    //           src="/assets/header.png"
-    //           alt="Description"
-    //           width={(906 * 0.7 * 200) / window.screen.width}
-    //           height={(324 * 0.7 * 200) / window.screen.width}
-    //           onDragStart={(e) => e.preventDefault()}
-    //         />
-    //       </Pane>
-    //       <Pane marginTop={32}>
-    //         <Autocomplete onChange={handleRecipeChange} items={recipeNames}>
-    //           {(props) => {
-    //             const { getInputProps, getRef, inputValue } = props;
-    //             return (
-    //               <TextInput
-    //                 placeholder="Find a recipe..."
-    //                 fontSize={20}
-    //                 size="large"
-    //                 maxWidth={400}
-    //                 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    //                 // @ts-ignore
-    //                 value={inputValue}
-    //                 ref={getRef}
-    //                 {...getInputProps({})}
-    //               />
-    //             );
-    //           }}
-    //         </Autocomplete>
-    //       </Pane>
-
-    //       <Button
-    //         marginTop={32}
-    //         marginLeft={16}
-    //         appearance="primary"
-    //         size="large"
-    //         onClick={handleBuildMealPlan}
-    //         disabled={selectedRecipe === null}
-    //       >
-    //         Build me a plan
-    //       </Button>
-    //     </Pane>
-
-    //     {/* Display Meal Plan */}
-    //     {mealPlan && (
-    //       <Card
-    //         userSelect="none"
-    //         elevation={3}
-    //         marginTop={64}
-    //         display="flex"
-    //         flexDirection="column"
-    //         justifyContent="space-between"
-    //         alignItems="center"
-    //         padding={16}
-    //         borderRadius={8}
-    //         backgroundColor={theme.colors.white}
-    //       >
-    //         <Pane minWidth={500}>
-    //           <Heading margin={8} paddingBottom={16} size={800}>
-    //             Recipes
-    //           </Heading>
-    //           {mealPlan.recipes.map((recipe) => (
-    //             <Pane margin={8} display="flex" alignItems="center" justifyContent="space-between">
-    //               <Heading size={600}>{recipe.name}</Heading>
-    //               <Heading size={400} marginLeft={8} fontFamily="Lora">
-    //                 Page {recipe.page}
-    //               </Heading>
-    //             </Pane>
-    //           ))}
-    //           <Heading margin={8} paddingTop={32} paddingBottom={16} size={800}>
-    //             Shopping List
-    //           </Heading>
-    //           {Object.keys(mealPlan.productList).map((product) => (
-    //             <Pane
-    //               paddingLeft={4}
-    //               paddingRight={4}
-    //               margin={4}
-    //               display="flex"
-    //               alignItems="center"
-    //               justifyContent="space-between"
-    //             >
-    //               <Heading size={600}>
-    //                 {mealPlan.productList[product]} {product}
-    //               </Heading>
-    //             </Pane>
-    //           ))}
-    //         </Pane>
-    //       </Card>
-    //     )}
-
-    //     {/* Thinking */}
-    //     {isComputing && (
-    //       <Pane marginTop={64} display="flex" flexDirection="column" alignItems="center" opacity={0.7}>
-    //         <LottieView
-    //           options={{
-    //             loop: true,
-    //             autoplay: true,
-    //             animationData: animationData,
-    //             rendererSettings: {
-    //               preserveAspectRatio: 'xMidYMid slice'
-    //             }
-    //           }}
-    //           speed={0.1}
-    //           height={100}
-    //           width={400}
-    //         />
-    //         <Heading size={500} marginTop={48} opacity={0.5}>
-    //           Building a plan
-    //         </Heading>
-    //       </Pane>
-    //     )}
-    //   </Screen>
-    // </ThemeProvider>
   );
-
-  // return (
-
-  //     <Screen>
-  //       {/* Header */}
-
-  //       )}
-  //     </Screen>
-  //   </ThemeProvider>
-  // );
 }
 
 export default App;
