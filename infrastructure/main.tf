@@ -5,124 +5,133 @@ provider "aws" {
 
 terraform {
   backend "s3" {
-    bucket         = "terraform.quanda.ai"
-    key            = "production.tfstate"      
+    bucket         = "infrastructure.harrysprojects.com"
+    key            = "meal-planner.tfstate"      
     region         = "eu-west-2"
     profile        = "personal"
     encrypt        = true
   }
 }
 
-variable "DB_NAME" {
-  type = string
+locals {
+  www_bucket_name = "meal-planner.harrysprojects.com"
+  s3_origin_id   = "meal-planner.harrysprojects.com-origin"
+  s3_domain_name = "meal-planner.harrysprojects.com.s3-website.eu-west-2.amazonaws.com"
 }
 
-variable "DB_USER" {
-  type = string
+resource "aws_s3_bucket" "www" {
+  bucket = local.www_bucket_name
 }
 
-variable "DB_PASSWORD" {
-  type = string
-}
+resource "aws_s3_bucket_website_configuration" "website-configuration" {
+  bucket = aws_s3_bucket.www.id
 
-resource "aws_security_group" "dragon_road_access" {
-  name        = "dragon_road_access"
-  description = "Allow SSH inbound traffic from home IP address"
-
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["82.37.52.190/32"]
+  index_document {
+    suffix = "index.html"
   }
 
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+  error_document {
+    key = "error.html"
   }
 
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+  routing_rule {
+    condition {
+      key_prefix_equals = "docs/"
+    }
+    redirect {
+      replace_key_prefix_with = "documents/"
+    }
   }
 }
 
-resource "aws_security_group" "quanda_db_access" {
-  name        = "quanda_db_access"
-  description = "Allow traffic from server to the PostgreSQL database"
+resource "aws_s3_bucket_public_access_block" "bucket_access_block" {
+  bucket = aws_s3_bucket.www.id
 
-  ingress {
-    from_port   = 5432
-    to_port     = 5432
-    protocol    = "tcp"
-    self        = true
+  block_public_acls   = false
+  block_public_policy = false
+}
+
+resource "aws_s3_bucket_policy" "bucket_policy" {
+  bucket = aws_s3_bucket.www.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect    = "Allow"
+        Principal = "*"
+        Action = [
+          "s3:GetObject"
+        ]
+        Resource = [
+          "${aws_s3_bucket.www.arn}/*"
+        ]
+      }
+    ]
+  })
+}
+
+
+resource "aws_cloudfront_distribution" "cdn" {
+  
+  enabled = true
+  aliases = [local.www_bucket_name]
+  
+  origin {
+    origin_id                = local.s3_origin_id
+    domain_name              = local.s3_domain_name
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "http-only"
+      origin_ssl_protocols   = ["TLSv1"]
+    }
   }
 
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+  viewer_certificate {
+    acm_certificate_arn = "arn:aws:acm:us-east-1:664735937512:certificate/c35acf0f-c6dd-4790-ab8f-26fc380c331b"
+    ssl_support_method  = "sni-only"
+    minimum_protocol_version = "TLSv1.2_2019"
   }
+
+  default_cache_behavior {
+    
+    target_origin_id = local.s3_origin_id
+    allowed_methods  = ["GET", "HEAD"]
+    cached_methods   = ["GET", "HEAD"]
+
+    forwarded_values {
+      query_string = true
+
+      cookies {
+        forward = "all"
+      }
+    }
+
+    viewer_protocol_policy = "redirect-to-https"
+    min_ttl                = 0
+    default_ttl            = 0
+    max_ttl                = 0
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  price_class = "PriceClass_200"
+  
 }
 
-resource "aws_instance" "server" {
-  ami           = "ami-0cfd0973db26b893b"
-  instance_type = "t2.micro"
+resource "aws_route53_record" "root_domain" {
+  zone_id = "Z0550305316EWCGRX5L4K"  # harrysprojects.com
+  name = local.www_bucket_name
+  type = "A"
 
-  key_name = aws_key_pair.quanda_key.key_name
-
-  vpc_security_group_ids = [aws_security_group.dragon_road_access.id, aws_security_group.quanda_db_access.id]
-
-  user_data = <<-EOF
-              #!/bin/bash           
-              sudo yum install docker -y
-              sudo service docker start
-              sudo usermod -aG docker ec2-user
-              sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-              sudo chmod +x /usr/local/bin/docker-compose
-              EOF
-}
-
-resource "aws_key_pair" "quanda_key" {
-  key_name   = "quanda_key"
-  public_key = file("/home/harry/.ssh/ssh.quanda.ai.pub")
-}
-
-resource "aws_eip" "server_eip" {
-  instance   = aws_instance.server.id
-  domain     = "vpc"
-  depends_on = [aws_instance.server]
-}
-
-resource "aws_route53_record" "api_record" {
-  zone_id = "Z021778017LHE453YOOJZ"  # quanda.ai
-  name    = "api.quanda.ai"
-  type    = "A"
-  ttl     = "300"
-  records = [aws_eip.server_eip.public_ip]
-}
-
-resource "aws_db_instance" "quanda_db" {
-  allocated_storage = 10
-  engine = "postgres"
-  db_name= var.DB_NAME
-  identifier = "quanda-db"
-  storage_encrypted = true
-  instance_class = "db.t3.micro"
-  username = var.DB_USER
-  password = var.DB_PASSWORD
-  skip_final_snapshot = true
-  vpc_security_group_ids = [aws_security_group.quanda_db_access.id]
+  alias {
+    name = "${aws_cloudfront_distribution.cdn.domain_name}"
+    zone_id = "${aws_cloudfront_distribution.cdn.hosted_zone_id}"
+    evaluate_target_health = false
+  }
 }

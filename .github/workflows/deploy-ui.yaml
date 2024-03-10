@@ -41,4 +41,4 @@ jobs:
           aws-region: eu-west-2
 
       - name: Deploy to S3
-        run: aws s3 sync ./ui/build s3://ui.quanda.ai --delete
+        run: aws s3 sync ./ui/build s3://meal-planner.harrysprojects.com --delete
