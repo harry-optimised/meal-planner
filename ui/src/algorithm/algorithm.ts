@@ -7,7 +7,7 @@ PRODUCTS.forEach((product) => {
 
 export type MealPlan = {
   recipes: Recipe[];
-  productList: Record<string, number>;
+  productList: Record<string, { quantity: number; product: Product; utilisation: number }>;
 };
 
 function makeInstance(recipes: Recipe[]): number[] {
@@ -76,7 +76,7 @@ function evaluateInstance(instance: number[], requiredRecipe: number): number {
 function geneticAlgorithm(recipes: Recipe[], requiredRecipe: number): Recipe[] {
   let population: number[][] = [];
   const populationSize = 32;
-  const rounds = 100;
+  const rounds = 200;
   for (let i = 0; i < populationSize; i++) {
     population.push(makeInstance(recipes));
   }
@@ -129,7 +129,7 @@ const buildMealPlan = async (startRecipe: Recipe): Promise<MealPlan> => {
 
   // TODO: Let's compute the percentage used and return that for the UI to display.
   // Compute the product list.
-  const productList: Record<string, number> = {};
+  const productList: Record<string, { quantity: number; product: Product; utilisation: number }> = {};
   for (const key in usedProducts) {
     // If key is not in products, ignore.
     if (!PRODUCTS_MAP[key]) {
@@ -139,7 +139,10 @@ const buildMealPlan = async (startRecipe: Recipe): Promise<MealPlan> => {
     const amountPerPack = PRODUCTS_MAP[key].quantity;
     const used = usedProducts[key];
     const itemsNeeded = Math.ceil(used / amountPerPack);
-    productList[key] = itemsNeeded;
+    const utilisation = ((used % amountPerPack) / amountPerPack) * 100 || 100;
+    const product = PRODUCTS_MAP[key];
+
+    productList[key] = { quantity: itemsNeeded, product, utilisation };
   }
 
   // Pause for a second to simulate a slow algorithm.
