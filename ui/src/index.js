@@ -4,20 +4,19 @@ import './index.css';
 import App from './App';
 import * as Sentry from '@sentry/react';
 
-if (process.env.REACT_APP_SENTRY_DSN) {
-  Sentry.init({
-    dsn: process.env.REACT_APP_SENTRY_DSN,
-    integrations: [
-      new Sentry.BrowserTracing({
-        tracePropagationTargets: ['localhost', /^https:\/\/quanda\.ai\/api/]
-      }),
-      new Sentry.Replay()
-    ],
-    tracesSampleRate: 1.0,
-    replaysSessionSampleRate: 0.1,
-    replaysOnErrorSampleRate: 1.0
-  });
-}
+Sentry.init({
+  dsn: 'https://cd2eb58fd21515cfbedd2cc3388ad7f4@o382306.ingest.us.sentry.io/4506972725968896',
+  integrations: [
+    Sentry.browserTracingIntegration(),
+    Sentry.replayIntegration({
+      maskAllText: false,
+      blockAllMedia: false
+    })
+  ],
+  // Session Replay
+  replaysSessionSampleRate: 0.1,
+  replaysOnErrorSampleRate: 1.0
+});
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(

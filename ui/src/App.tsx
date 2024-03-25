@@ -1,4 +1,4 @@
-import React, { ChangeEvent, useEffect, useState } from 'react';
+import React, { ChangeEvent, useState } from 'react';
 
 // Components
 import {
@@ -25,16 +25,14 @@ import {
   Divider,
   Progress
 } from '@chakra-ui/react';
-import LottieView from 'react-lottie';
-import animationData from './loading.json';
 import RecipeCard from './components/RecipeCard';
 import { CloseIcon } from '@chakra-ui/icons';
 
 // Algorithm
 import buildMealPlan, { MealPlan } from './algorithm/algorithm';
-import { Recipe, RECIPES } from './algorithm/data';
+import { PRODUCTS, Recipe, RECIPES } from './algorithm/data';
 import { flushSync } from 'react-dom';
-import { on } from 'events';
+import Fuse from 'fuse.js';
 
 function BasicUsage() {
   const { isOpen, onOpen, onClose } = useDisclosure({ defaultIsOpen: false });
@@ -90,7 +88,15 @@ function AutocompleteSearch({ options, onSelect }: AutocompleteProps) {
     onSelect('');
     setInputValue(value);
 
-    const filteredOptions = options.filter((option) => option.id.toLowerCase().includes(value.toLowerCase()));
+    if (!value) {
+      setFilteredSuggestions(options.slice(0, 10));
+      return;
+    }
+
+    const optionNames = options.map((option) => option.name);
+    const fuse = new Fuse(optionNames, { isCaseSensitive: true, threshold: 0.5 });
+    const filteredOptions = fuse.search(value).map((result) => options[result.refIndex]);
+
     setFilteredSuggestions(filteredOptions.slice(0, 10));
   };
 
@@ -140,15 +146,16 @@ function AutocompleteSearch({ options, onSelect }: AutocompleteProps) {
               <ListItem
                 key={index}
                 cursor="pointer"
+                bg="teal.700"
                 _hover={{ bg: 'teal.900' }}
                 onClick={() => handleSelect(suggestion.id)}
                 textColor="white"
-                fontWeight={600}
+                fontWeight={500}
                 padding={1}
                 paddingLeft={2}
                 borderRadius={4}
               >
-                {suggestion.id}
+                {suggestion.name}
               </ListItem>
             ))}
           </List>
@@ -159,7 +166,6 @@ function AutocompleteSearch({ options, onSelect }: AutocompleteProps) {
 }
 
 // TODO: Allow selecting number of recipes.
-// TODO: Popup with disclaimer, show a help button as well.
 
 function MealPlanner() {
   // State
@@ -205,12 +211,12 @@ function MealPlanner() {
     }
   };
 
-  const getEstimatedCost = (mealPlan: MealPlan) => {
-    const cost = Object.keys(mealPlan.productList).reduce((acc, product) => {
-      return acc + mealPlan.productList[product].product.price * mealPlan.productList[product].quantity;
-    }, 0);
-    return cost.toFixed(2);
-  };
+  // const getEstimatedCost = (mealPlan: MealPlan) => {
+  //   const cost = Object.keys(mealPlan.productList).reduce((acc, product) => {
+
+  //   }, 0);
+  //   return cost.toFixed(2);
+  // };
 
   return (
     <Flex direction="column" justify="flex-start" align="center" width="100%" marginBottom={6}>
@@ -258,7 +264,7 @@ function MealPlanner() {
             Shopping List
           </Text>
           <Box margin={4}>
-            {Object.keys(mealPlan.productList).map((product) => (
+            {mealPlan.productList.map((product) => (
               <Box
                 display="flex"
                 flexDirection="column"
@@ -268,36 +274,21 @@ function MealPlanner() {
                 marginBottom={4}
               >
                 <Text fontSize="lg">
-                  {mealPlan.productList[product].quantity} x {mealPlan.productList[product].product.container}{' '}
-                  {getJoiningWord(mealPlan.productList[product].product.container)} {product} from{' '}
-                  {mealPlan.productList[product].product.shop}
+                  {product.purchaseQuantity} x {product.container} {getJoiningWord(product.container)}
+                  {` ${product.id}`} from {product.shop}
                 </Text>
-                <Progress value={mealPlan.productList[product].utilisation} width="50%" />
               </Box>
             ))}
           </Box>
-          <Text fontSize="xl" fontWeight="bold" margin={4}>
+          {/* <Text fontSize="xl" fontWeight="bold" margin={4}>
             Estimated Cost: £{getEstimatedCost(mealPlan)}
-          </Text>
+          </Text> */}
         </Box>
       )}
 
       {/* Thinking */}
       {isComputing && (
         <Box marginTop={8} display="flex" flexDirection="column" alignItems="center" opacity={0.7}>
-          {/* <LottieView
-              options={{
-                loop: true,
-                autoplay: true,
-                animationData: animationData,
-                rendererSettings: {
-                  preserveAspectRatio: 'xMidYMid slice'
-                }
-              }}
-              speed={0.1}
-              height={100}
-              width={400}
-            /> */}
           <Spinner color="gray.200" size="xl" />
           <Text fontSize="lg" marginTop={8} fontWeight="bold" color="white">
             Building a plan

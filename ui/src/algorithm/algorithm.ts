@@ -5,15 +5,17 @@ PRODUCTS.forEach((product) => {
   PRODUCTS_MAP[product.id] = product;
 });
 
+export type RequiredProduct = Product & { totalQuantity: number; purchaseQuantity: number; utilisation: number };
+
 export type MealPlan = {
   recipes: Recipe[];
-  productList: Record<string, { quantity: number; product: Product; utilisation: number }>;
+  productList: RequiredProduct[];
 };
 
-function makeInstance(recipes: Recipe[]): number[] {
+function makeInstance(): number[] {
   const instance = [];
   for (let i = 0; i < 4; i++) {
-    instance.push(Math.floor(Math.random() * recipes.length));
+    instance.push(Math.floor(Math.random() * RECIPES.length));
   }
   return instance;
 }
@@ -75,10 +77,10 @@ function evaluateInstance(instance: number[], requiredRecipe: number): number {
 
 function geneticAlgorithm(recipes: Recipe[], requiredRecipe: number): Recipe[] {
   let population: number[][] = [];
-  const populationSize = 32;
+  const populationSize = 64;
   const rounds = 200;
   for (let i = 0; i < populationSize; i++) {
-    population.push(makeInstance(recipes));
+    population.push(makeInstance());
   }
 
   function nextGeneration(population: number[][]): number[][] {
@@ -92,8 +94,9 @@ function geneticAlgorithm(recipes: Recipe[], requiredRecipe: number): Recipe[] {
     for (let i = 0; i < populationSize; i++) {
       const parentA = bestHalf[Math.floor(Math.random() * bestHalf.length)].instance;
       const parentB = bestHalf[Math.floor(Math.random() * bestHalf.length)].instance;
-      const crossoverPoint = Math.floor(Math.random() * 4);
+      const crossoverPoint = Math.floor(Math.random() * Math.min(parentA.length, parentB.length));
       const child = [...parentA.slice(0, crossoverPoint), ...parentB.slice(crossoverPoint)];
+
       nextGeneration.push(child);
     }
 
@@ -118,37 +121,48 @@ const buildMealPlan = async (startRecipe: Recipe): Promise<MealPlan> => {
   const requiredRecipe = RECIPES.indexOf(startRecipe);
   const recipeList = geneticAlgorithm(RECIPES, requiredRecipe);
 
+  console.log(recipeList);
+
   // Compute product usage from this set of recipes.
-  const usedProducts: Record<string, number> = {};
+  const usedProducts: RequiredProduct[] = [];
   recipeList.forEach((recipe) => {
     recipe.ingredients.forEach((ingredient) => {
-      usedProducts[ingredient.id] = usedProducts[ingredient.id] || 0;
-      usedProducts[ingredient.id] += ingredient.quantity;
+      const product = PRODUCTS_MAP[ingredient.id];
+      if (!product) return;
+
+      const usedProduct = usedProducts.find((usedProduct) => usedProduct.id === product.id);
+      if (usedProduct) {
+        usedProduct.totalQuantity += ingredient.quantity;
+      } else {
+        usedProducts.push({ ...product, totalQuantity: ingredient.quantity, purchaseQuantity: 0, utilisation: 0 });
+      }
     });
   });
 
-  // TODO: Let's compute the percentage used and return that for the UI to display.
-  // Compute the product list.
-  const productList: Record<string, { quantity: number; product: Product; utilisation: number }> = {};
-  for (const key in usedProducts) {
-    // If key is not in products, ignore.
-    if (!PRODUCTS_MAP[key]) {
-      continue;
-    }
+  console.log(usedProducts);
 
-    const amountPerPack = PRODUCTS_MAP[key].quantity;
-    const used = usedProducts[key];
+  // Iterate through usedProducts and compute purchaseQuantity and utilisation.
+  usedProducts.forEach((product) => {
+    const amountPerPack = product.quantity;
+    const used = product.totalQuantity;
     const itemsNeeded = Math.ceil(used / amountPerPack);
-    const utilisation = ((used % amountPerPack) / amountPerPack) * 100 || 100;
-    const product = PRODUCTS_MAP[key];
+    const utilisation = (used / (itemsNeeded * product.quantity)) * 100;
+    product.purchaseQuantity = itemsNeeded;
+    product.utilisation = utilisation;
+  });
 
-    productList[key] = { quantity: itemsNeeded, product, utilisation };
-  }
+  // Compute a single score for weight average utilisation.
+  const totalWeight = usedProducts.reduce((acc, product) => acc + product.totalQuantity, 0);
+  const score = usedProducts.reduce(
+    (acc, product) => acc + (product.totalQuantity / totalWeight) * product.utilisation,
+    0
+  );
+  console.log('Score:', score);
 
-  // Pause for a second to simulate a slow algorithm.
-  await new Promise((resolve) => setTimeout(resolve, 3000));
+  // // Pause for a second to simulate a slow algorithm.
+  // await new Promise((resolve) => setTimeout(resolve, 3000));
 
-  return { recipes: recipeList, productList };
+  return { recipes: recipeList, productList: usedProducts };
 };
 
 export default buildMealPlan;
